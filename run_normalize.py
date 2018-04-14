@@ -17,6 +17,7 @@ import tensorflow as tf
 import time
 import gc
 from sklearn.utils import class_weight
+from sklearn.metrics.pairwise import euclidean_distances
 
 class mdl_normalize(object):
 
@@ -177,6 +178,46 @@ class mdl_normalize(object):
                     f.write("%s,%s\n" % (image, predicted_tags))
         f.close()
 
+    def submit_euc_dist(self, name, X, test_images, test_preds):
+        with open('submissions/normalize/{}.csv'.format(name), 'w') as f:
+            with warnings.catch_warnings():
+                f.write("Image,Id\n")
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                n = 0
+                for image in test_preds:
+                    # pred = test_preds.iloc[image, :]
+                    pred = test_preds[n]
+                    euc_dist = euclidean_distances(X, pred)
+                    most_proba = list()
+                    maxi_1 = min(euc_dist)
+                    maxi_1_value = np.where(euc_dist == maxi_1)[0]
+                    most_proba.append(y[int(maxi_1_value[0])])
+                    siguientes_2 = euc_dist[np.where(euc_dist != maxi_1)[0]]
+
+                    maxi_2 = min(siguientes_2)
+                    maxi_2_value = np.where(euc_dist == maxi_2)[0]
+                    most_proba.append(y[int(maxi_2_value[0])])
+                    siguientes_3 = siguientes_2[np.where(siguientes_2 != maxi_2)[0]]
+
+                    maxi_3 = min(siguientes_3)
+                    maxi_3_value = np.where(euc_dist == maxi_3)[0]
+                    most_proba.append(y[int(maxi_3_value[0])])
+                    siguientes_4 = siguientes_3[np.where(siguientes_3 != maxi_3)[0]]
+
+                    maxi_4 = min(siguientes_4)
+                    maxi_4_value = np.where(euc_dist == maxi_4)[0]
+                    most_proba.append(y[int(maxi_4_value[0])])
+
+                    most_proba = np.array(most_proba)
+                    most_proba = ['new_whale'] + most_proba.tolist()
+                    # label_arg = self.predict_4_better(test_preds[n - 1])
+                    # preds = self.label_encoder.inverse_transform(label_arg)
+                    # preds = ['new_whale'] + preds.tolist()
+                    predicted_tags = " ".join(most_proba)
+                    f.write("%s,%s\n" % (test_images[n], predicted_tags))
+                    n += 1
+        f.close()
+
 
     def load_Xdata(self, directory):
         X = np.load(directory)['arr_0']
@@ -230,7 +271,7 @@ if __name__ == '__main__':
 
     # NAMES #
     model_name = 'model_whitout_new_whale_56_6_098'
-    submit_name = 'submission_56_6_098'
+    submit_name = 'submission_56_6_euc_dist_1'
     #########
     print('Generating model {}...'.format(model_name))
     model = Sequential()
@@ -266,8 +307,8 @@ if __name__ == '__main__':
     gc.collect()
     print('Predictions...')
     # from keras.models import load_model
-    # model = load_model('models/normalize/model_whitout_new_whale_56_5.h5')
-    # model.load_weights('weights/normalize/model_whitout_new_whale_56_5.h5')
+    # model = load_model('models/normalize/model_whitout_new_whale_56_6.h5')
+    # model.load_weights('weights/normalize/model_whitout_new_whale_56_6.h5')
     X_test = mdl.load_Xdata('data/array_data/X_test_{}.npz'.format(input_size))
     test_normalized = mdl.normalize_images(X_test)
     del X_test
@@ -278,5 +319,6 @@ if __name__ == '__main__':
 
     t0 = time.time()
     mdl.new_submit(submit_name, test_preds, test_images, thr=0.98)
+    # mdl.submit_euc_dist(submit_name, X_normalized, test_images, test_preds)
     mdl.submit(submit_name+'_thr098', test_preds, test_images)
     print('Submit prediction in: {} secs'.format(round(time.time() - t0, 1)))

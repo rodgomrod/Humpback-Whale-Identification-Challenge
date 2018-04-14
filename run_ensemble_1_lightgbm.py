@@ -8,34 +8,25 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing import LabelEncoder
 import cv2
 import h5py
-from keras.models import Sequential
-from keras.layers.core import Dense, Activation, Flatten, Dropout
-from keras.layers.convolutional import Convolution2D
-from keras.layers.pooling import MaxPooling2D
-import keras
-import tensorflow as tf
 import time
 import gc
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
+from sklearn.externals import joblib
+import lightgbm as lgb
 from sklearn.metrics.pairwise import euclidean_distances
+from xgboost import XGBClassifier
+from sklearn.model_selection import GridSearchCV
 
 class mdl_ensemble(object):
 
     def __init__(self):
-        if not os.path.exists('models/ensemble1'):
-            os.makedirs('models/ensemble1')
+        if not os.path.exists('models/ensemble1_lightgbm'):
+            os.makedirs('models/ensemble1_lightgbm')
 
-        if not os.path.exists('submissions/ensemble1'):
-            os.makedirs('submissions/ensemble1')
+        if not os.path.exists('submissions/ensemble1_lightgbm'):
+            os.makedirs('submissions/ensemble1_lightgbm')
 
-        if not os.path.exists('weights/ensemble1'):
-            os.makedirs('weights/ensemble1')
+        if not os.path.exists('weights/ensemble1_lightgbm'):
+            os.makedirs('weights/ensemble1_lightgbm')
 
         self.label_encoder = LabelEncoder()
         self.label_binarizer = LabelBinarizer()
@@ -119,7 +110,7 @@ class mdl_ensemble(object):
         return most_proba
 
     def submit(self, name, test_preds, test_images):
-        with open('submissions/ensemble1/{}.csv'.format(name), 'w') as f:
+        with open('submissions/ensemble1_lightgbm/{}.csv'.format(name), 'w') as f:
             with warnings.catch_warnings():
                 f.write("Image,Id\n")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -167,7 +158,7 @@ class mdl_ensemble(object):
         return most_proba
 
     def new_submit(self,name, test_preds, test_images, thr=0.5):
-        with open('submissions/ensemble1/{}.csv'.format(name), 'w') as f:
+        with open('submissions/ensemble1_lightgbm/{}.csv'.format(name), 'w') as f:
             with warnings.catch_warnings():
                 f.write("Image,Id\n")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -185,7 +176,7 @@ class mdl_ensemble(object):
         f.close()
 
     def submit_euc_dist(self, name, X, y, test_images, test_preds):
-        with open('submissions/ensemble1/{}.csv'.format(name), 'w') as f:
+        with open('submissions/ensemble1_lightgbm/{}.csv'.format(name), 'w') as f:
             with warnings.catch_warnings():
                 f.write("Image,Id\n")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -230,7 +221,6 @@ class mdl_ensemble(object):
                     n += 1
         f.close()
 
-
     def load_Xdata(self, directory):
         X = np.load(directory)['arr_0']
 
@@ -258,70 +248,62 @@ if __name__ == '__main__':
     n_output = len(y.unique())
 
     # NAMES #
-    model_name = 'model_ensemble1_6'
-    submit_name = 'submission_ensemble6_new'
+    model_name = 'model_ensemble1_1'
+    submit_name = 'submission_ensemble1'
     #########
+
     print('Generating model {}...'.format(model_name))
-    model = Sequential()
+    fit_dict_xgbc = {
+        # "eval_set": [(X_train, y_train)],
+                     "early_stopping_rounds": 5,
+                     "verbose": True,
+                     "eval_metric": "mlogloss",
+                     }
 
-    model.add(Dense(4, activation='relu', input_dim=n_cols))
-    model.add(Dense(8, activation='relu'))
-    # model.add(Dense(64, activation='relu'))
-    # model.add(Dense(512, activation='relu'))
-    # model.add(Dense(2048, activation='relu'))
-    model.add(Dense(n_cols, activation='softmax'))
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-    earlyStopping = keras.callbacks.EarlyStopping(monitor='acc', patience=5, verbose=1, mode='auto')
-    print('Training model...')
-    # skf = StratifiedKFold(n_splits=10, shuffle=True)
-    #
-    # # Loop through the indices the split() method returns
-    # for index, (train_indices, val_indices) in enumerate(skf.split(X, y)):
-    #     print("Training on fold " + str(index + 1) + "/10...")
-    #     # Generate batches from indices
-    #     xtrain, xval = X[train_indices], X[val_indices]
-    #     ytrain, yval = y_one_hot[train_indices], y_one_hot[val_indices]
-    #
-    #     history = model.fit(xtrain,
-    #                         ytrain,
-    #                         epochs=200,
-    #                         verbose=1,  # 2 -> Only 1 print per epoch
-    #                         callbacks=[earlyStopping],
-    #                         batch_size=2,
-    #                         validation_data=(xval, yval)
-    #                         )
-    #     accuracy_history = history.history['acc']
-    #     val_accuracy_history = history.history['val_acc']
-    #     print("Last training accuracy: " + str(accuracy_history[-1]) + ", last validation accuracy: "
-    #           + str(val_accuracy_history[-1]))
-    history = model.fit(X,
-                        y_one_hot,
-                        epochs=200,
-                        verbose=2, # 2 -> Only 1 print per epoch
-                        callbacks=[earlyStopping],
-                        batch_size=64
-                        )
+    parameters_xgbc = {"learning_rate": [0.05],
+                       "max_depth": [10, 20],
+                       "n_estimators": [500, 600],
+                       }
 
-    model.save_weights('weights/ensemble1/{}.h5'.format(model_name))
-    model.save('models/ensemble1/{}.h5'.format(model_name))
 
+    xgboost_estimator = XGBClassifier(nthread=4,
+                                  seed=42,
+                                  subsample=0.8,
+                                  colsample_bytree=0.6,
+                                  colsample_bylevel=0.7,
+                                  )
+
+    model = GridSearchCV(estimator=xgboost_estimator,
+                                 param_grid=parameters_xgbc,
+                                 n_jobs=4,
+                                 cv=5,
+                                 fit_params=fit_dict_xgbc,
+                                 verbose=10,
+                                 )
+    tmp = time.time()
+    model.fit(X, y_label,
+                      # evals=[(dtest, 'test')],
+                      # evals_result=gpu_res
+                      )
+
+    joblib.dump(model, 'models/ensemble1_lightgbm/{}.pkl'.format(model_name))
+
+    # from keras.models import load_model
+    # model = load_model('models/normalize/model_whitout_new_whale_56_6.h5')
+    # model.load_weights('weights/normalize/model_whitout_new_whale_56_6.h5')
     print('Training time: {} min'.format(round((time.time() - t0) / 60, 2)))
 
     del X
     gc.collect()
     print('Predictions...')
-    # from keras.models import load_model
-    # model = load_model('models/ensemble1/{}.h5'.format(model_name))
-    # model.load_weights('weights/ensemble1/{}.h5'.format(model_name))
     X_test = pd.read_csv('data/test_ensemble_1.csv')
     test_preds = model.predict_proba(X_test)
     del X_test
     gc.collect()
 
-    print('Submissions...')
     t0 = time.time()
-    # mdl.submit_euc_dist(submit_name + '_euc_dist', X, y, test_images, test_preds)
-    mdl.new_submit(submit_name, test_preds, test_images, thr=0.99)
-    mdl.submit(submit_name+'_thr099', test_preds, test_images)
+    # mdl.submit_euc_dist(submit_name+'_euc_dist', X, y, test_images, test_preds)
+    mdl.new_submit(submit_name+'_thr099', test_preds, test_images, thr=0.99)
+    mdl.submit(submit_name, test_preds, test_images)
     print('Submit prediction in: {} secs'.format(round(time.time() - t0, 1)))
