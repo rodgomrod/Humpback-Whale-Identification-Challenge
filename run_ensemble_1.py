@@ -24,6 +24,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics.pairwise import euclidean_distances
+from keras import optimizers
 
 class mdl_ensemble(object):
 
@@ -258,8 +259,8 @@ if __name__ == '__main__':
     n_output = len(y.unique())
 
     # NAMES #
-    model_name = 'model_ensemble1_6'
-    submit_name = 'submission_ensemble6_new'
+    model_name = 'model_ensemble1_7'
+    submit_name = 'submission_ensemble7'
     #########
     print('Generating model {}...'.format(model_name))
     model = Sequential()
@@ -270,31 +271,11 @@ if __name__ == '__main__':
     # model.add(Dense(512, activation='relu'))
     # model.add(Dense(2048, activation='relu'))
     model.add(Dense(n_cols, activation='softmax'))
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
 
     earlyStopping = keras.callbacks.EarlyStopping(monitor='acc', patience=5, verbose=1, mode='auto')
     print('Training model...')
-    # skf = StratifiedKFold(n_splits=10, shuffle=True)
-    #
-    # # Loop through the indices the split() method returns
-    # for index, (train_indices, val_indices) in enumerate(skf.split(X, y)):
-    #     print("Training on fold " + str(index + 1) + "/10...")
-    #     # Generate batches from indices
-    #     xtrain, xval = X[train_indices], X[val_indices]
-    #     ytrain, yval = y_one_hot[train_indices], y_one_hot[val_indices]
-    #
-    #     history = model.fit(xtrain,
-    #                         ytrain,
-    #                         epochs=200,
-    #                         verbose=1,  # 2 -> Only 1 print per epoch
-    #                         callbacks=[earlyStopping],
-    #                         batch_size=2,
-    #                         validation_data=(xval, yval)
-    #                         )
-    #     accuracy_history = history.history['acc']
-    #     val_accuracy_history = history.history['val_acc']
-    #     print("Last training accuracy: " + str(accuracy_history[-1]) + ", last validation accuracy: "
-    #           + str(val_accuracy_history[-1]))
     history = model.fit(X,
                         y_one_hot,
                         epochs=200,

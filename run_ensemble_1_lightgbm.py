@@ -15,6 +15,7 @@ import lightgbm as lgb
 from sklearn.metrics.pairwise import euclidean_distances
 from xgboost import XGBClassifier
 from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Lasso
 
 class mdl_ensemble(object):
 
@@ -250,8 +251,8 @@ if __name__ == '__main__':
     model_name = 'model_ensemble1_1'
     submit_name = 'submission_ensemble1'
     #########
-
     print('Generating model {}...'.format(model_name))
+
     # fit_dict_xgbc = {
     #     # "eval_set": [(X_train, y_train)],
     #                  "early_stopping_rounds": 5,
@@ -280,11 +281,42 @@ if __name__ == '__main__':
     #                              fit_params=fit_dict_xgbc,
     #                              verbose=10,
     #                              )
-    model = XGBClassifier()
-    model.fit(X, y_label,
-                      # evals=[(dtest, 'test')],
-                      # evals_result=gpu_res
+    # model = XGBClassifier
+
+    train_data = lgb.Dataset(X, label=y_label)
+    del X
+    gc.collect()
+
+    #
+    # Train the model
+    #
+
+    parameters = {
+        'application': 'multiclass',
+        'objective': 'multiclass',
+        'metric': 'auc',
+        'is_unbalance': 'true',
+        'boosting': 'gbdt',
+        'num_leaves': 31,
+        'feature_fraction': 1,
+        # 'bagging_fraction': 0.5,
+        # 'bagging_freq': 20,
+        'learning_rate': 0.1,
+        'verbose': 100,
+        'num_class': n_output,
+        'max_depth': 5
+    }
+
+    model = lgb.train(parameters,
+                           train_data,
+                           num_boost_round=100,
+                           # early_stopping_rounds=10
                       )
+
+    # model.fit(X, y_label,
+    #                   # evals=[(dtest, 'test')],
+    #                   # evals_result=gpu_res
+    #                   )
 
     joblib.dump(model, 'models/ensemble1_lightgbm/{}.pkl'.format(model_name))
 
