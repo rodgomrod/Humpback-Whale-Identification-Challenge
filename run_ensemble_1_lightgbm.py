@@ -109,13 +109,13 @@ class mdl_ensemble(object):
 
         return most_proba
 
-    def submit(self, name, test_preds, test_images):
+    def submit(self, name, test_preds):
         with open('submissions/ensemble1_lightgbm/{}.csv'.format(name), 'w') as f:
             with warnings.catch_warnings():
                 f.write("Image,Id\n")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
                 n = 0
-                for image in test_images:
+                for image in range(len(test_preds)):
                     n += 1
                     label_arg = self.predict_4_better(test_preds[n - 1])
                     preds = self.label_encoder.inverse_transform(label_arg)
@@ -157,13 +157,13 @@ class mdl_ensemble(object):
 
         return most_proba
 
-    def new_submit(self,name, test_preds, test_images, thr=0.5):
+    def new_submit(self,name, test_preds, thr=0.5):
         with open('submissions/ensemble1_lightgbm/{}.csv'.format(name), 'w') as f:
             with warnings.catch_warnings():
                 f.write("Image,Id\n")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
                 n = 0
-                for image in test_images:
+                for image in range(len(test_preds)):
                     n += 1
                     label_arg = self.predict_new_5_better(test_preds[n - 1], thr)
                     if label_arg[0] == 'new_whale':
@@ -235,7 +235,6 @@ if __name__ == '__main__':
     X = train.loc[:, train.columns != 'Id']
     n_cols = len(X.columns)
     y = train['Id']
-    test_images = mdl.data_train_extraction('data/test')
 
     # Label encoder y one hot. Necessary for keras models
     y_label = mdl.label_encoder.fit_transform(y)
@@ -253,35 +252,35 @@ if __name__ == '__main__':
     #########
 
     print('Generating model {}...'.format(model_name))
-    fit_dict_xgbc = {
-        # "eval_set": [(X_train, y_train)],
-                     "early_stopping_rounds": 5,
-                     "verbose": True,
-                     "eval_metric": "mlogloss",
-                     }
-
-
-    parameters_xgbc = {"learning_rate": [0.05],
-                       "max_depth": [10, 20],
-                       "n_estimators": [500, 600],
-                       }
-
-
-    xgboost_estimator = XGBClassifier(nthread=4,
-                                  seed=42,
-                                  subsample=0.8,
-                                  colsample_bytree=0.6,
-                                  colsample_bylevel=0.7,
-                                  )
-
-    model = GridSearchCV(estimator=xgboost_estimator,
-                                 param_grid=parameters_xgbc,
-                                 n_jobs=4,
-                                 cv=5,
-                                 fit_params=fit_dict_xgbc,
-                                 verbose=10,
-                                 )
-    tmp = time.time()
+    # fit_dict_xgbc = {
+    #     # "eval_set": [(X_train, y_train)],
+    #                  "early_stopping_rounds": 5,
+    #                  "verbose": True,
+    #                  "eval_metric": "mlogloss",
+    #                  }
+    #
+    #
+    # parameters_xgbc = {"learning_rate": [0.05],
+    #                    "max_depth": [10, 20],
+    #                    "n_estimators": [500, 600],
+    #                    }
+    #
+    #
+    # xgboost_estimator = XGBClassifier(nthread=4,
+    #                               seed=42,
+    #                               subsample=0.8,
+    #                               colsample_bytree=0.6,
+    #                               colsample_bylevel=0.7,
+    #                               )
+    #
+    # model = GridSearchCV(estimator=xgboost_estimator,
+    #                              param_grid=parameters_xgbc,
+    #                              n_jobs=4,
+    #                              cv=5,
+    #                              fit_params=fit_dict_xgbc,
+    #                              verbose=10,
+    #                              )
+    model = XGBClassifier()
     model.fit(X, y_label,
                       # evals=[(dtest, 'test')],
                       # evals_result=gpu_res
@@ -304,6 +303,6 @@ if __name__ == '__main__':
 
     t0 = time.time()
     # mdl.submit_euc_dist(submit_name+'_euc_dist', X, y, test_images, test_preds)
-    mdl.new_submit(submit_name+'_thr099', test_preds, test_images, thr=0.99)
-    mdl.submit(submit_name, test_preds, test_images)
+    mdl.new_submit(submit_name+'_thr099', test_preds, thr=0.99)
+    mdl.submit(submit_name, test_preds)
     print('Submit prediction in: {} secs'.format(round(time.time() - t0, 1)))
