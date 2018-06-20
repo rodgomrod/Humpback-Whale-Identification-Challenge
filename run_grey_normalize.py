@@ -12,6 +12,8 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Flatten, Dropout
 from keras.layers.convolutional import Convolution2D
 from keras.layers.pooling import MaxPooling2D
+from keras.models import load_model
+from keras.preprocessing.image import ImageDataGenerator
 import keras
 import tensorflow as tf
 import time
@@ -54,7 +56,12 @@ class mdl_normalize(object):
     def normalize_images(self, X):
         X_grey = [cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in X]
         X_grey = np.asarray(X_grey)
-        X_normalized_grey = self.normalize_scale(X_grey)
+        X_normalized_grey = X_grey
+
+        # X_normalized_grey = self.normalize_scale(X_grey)
+
+        # X_normalized_grey = [cv2.GaussianBlur(i, (5, 5), 0) for i in X] #blurred
+        # X_normalized_grey = np.asarray(X_normalized_grey)
 
         return X_normalized_grey
 
@@ -122,6 +129,11 @@ class mdl_normalize(object):
                 n = 0
                 for image in test_images:
                     n += 1
+                    # PREDICTIONS WITHOUT NEW_WHALE:
+                    # label_arg = self.predict_5_better(test_preds[n - 1])
+                    # preds = self.label_encoder.inverse_transform(label_arg)
+                    # preds = preds.tolist()
+                    # PREDICTIONS WITH NEW_WHALE:
                     label_arg = self.predict_4_better(test_preds[n - 1])
                     preds = self.label_encoder.inverse_transform(label_arg)
                     preds = ['new_whale'] + preds.tolist()
@@ -211,9 +223,9 @@ if __name__ == '__main__':
     df_train = df_train[df_train['Id'] != 'new_whale']
 
     # Select only 1 per class
-    df_train = df_train.reset_index(drop=True)
-    df_train.drop_duplicates(subset='Id', keep='first', inplace=True)
-    X_train = X_train[df_train.index]
+    # df_train = df_train.reset_index(drop=True)
+    # df_train.drop_duplicates(subset='Id', keep='first', inplace=True)
+    # X_train = X_train[df_train.index]
 
     # Select Y labels to train
     y = df_train['Id']
@@ -229,21 +241,23 @@ if __name__ == '__main__':
     gc.collect()
 
     # Balancing data
-    class_weight = class_weight.compute_class_weight('balanced',
-                                                     np.unique(y_label),
-                                                     y_label)
+    # class_weight = class_weight.compute_class_weight('balanced',
+    #                                                  np.unique(y_label),
+    #                                                  y_label)
 
 
     t0 = time.time()
     n_output = len(df_train['Id'].unique())
 
     # NAMES #
-    model_name = 'model_whitout_new_whale_56_7_only1perclass'
-    submit_name = 'submission_56_7_only1perclass'
+    model_name = 'model_56_11'
+    submit_name = 'submission_56_11'
     #########
 
     print('Generating model {}...'.format(model_name))
     model = Sequential()
+
+
     # model.add(Convolution2D(4, 1, 1, input_shape=(1, input_size, input_size), activation="relu"))
     # # model.add(MaxPooling2D((2, 2)))
     # # model.add(Dropout(0.2))
@@ -260,33 +274,56 @@ if __name__ == '__main__':
     model.add(Convolution2D(8, 1, 1))
     model.add(Activation('relu'))
     # model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-    model.add(Dropout(0.25))
+    model.add(Dropout(0.15))
 
     model.add(Convolution2D(16, 1, 1))
     model.add(Activation('relu'))
     model.add(Convolution2D(16, 1, 1))
     model.add(Activation('relu'))
     # model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-    model.add(Dropout(0.25))
+    model.add(Dropout(0.15))
 
-    # model.add(Convolution2D(1024, 1, 1))
-    # model.add(Activation('relu'))
-    # model.add(Convolution2D(1024, 1, 1))
-    # model.add(Activation('relu'))
+    model.add(Convolution2D(64, 1, 1))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(64, 1, 1))
+    model.add(Activation('relu'))
     # model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-    # model.add(Dropout(0.25))
+    model.add(Dropout(0.15))
+
+    model.add(Convolution2D(128, 1, 1))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(128, 1, 1))
+    model.add(Activation('relu'))
+    # model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+    model.add(Dropout(0.15))
 
     model.add(Flatten())
     model.add(Dense(n_output, activation="softmax"))
 
     model.compile('adam', 'categorical_crossentropy', ['accuracy'])
-
     earlyStopping = keras.callbacks.EarlyStopping(monitor='acc', patience=5, verbose=1, mode='auto')
+
+    # print('Pre-processing images')
+    # gen = ImageDataGenerator(
+    #     rotation_range=360.,
+    #     width_shift_range=0.2,
+    #     height_shift_range=0.2,
+    #     zoom_range=0.5,
+    #     horizontal_flip=True,
+    #     vertical_flip=True
+    # )
+    # model.fit_generator(gen.flow(X_normalized, y_one_hot),
+    #                     steps_per_epoch=100,
+    #                     epochs=200,
+    #                     verbose=2,
+    #                     shuffle=True,
+    #                     callbacks=[earlyStopping])
+
     print('Training model...')
     history = model.fit(X_normalized,
                         y_one_hot,
                         epochs=200,
-                        verbose=1, # 2 -> Only 1 print per epoch
+                        verbose=2, # 2 -> Only 1 print per epoch
                         callbacks=[earlyStopping],
                         # class_weight=class_weight,
                         batch_size = 512,
@@ -301,7 +338,6 @@ if __name__ == '__main__':
     del X_normalized
     gc.collect()
     print('Predictions...')
-    # from keras.models import load_model
     # model = load_model('models/grey_normalize/model_whitout_new_whale_56_4_balanced.h5')
     # model.load_weights('weights/grey_normalize/model_whitout_new_whale_56_4_balanced.h5')
     X_test = mdl.load_Xdata('data/array_data/X_test_{}.npz'.format(input_size))
@@ -315,5 +351,5 @@ if __name__ == '__main__':
 
     t0 = time.time()
     mdl.submit(submit_name, test_preds, test_images)
-    mdl.new_submit(submit_name+'_thr098', test_preds, test_images, thr=0.98)
+    # mdl.new_submit(submit_name+'_thr098', test_preds, test_images, thr=0.98)
     print('Submit prediction in: {} secs'.format(round(time.time() - t0, 1)))
